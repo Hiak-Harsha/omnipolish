@@ -13,6 +13,7 @@ def main():
     parser.add_argument("--desktop", action="store_true", help="Run the system-wide desktop hotkey daemon")
     parser.add_argument("--server", action="store_true", help="Run the local REST API server for extensions & mobile")
     parser.add_argument("--all", action="store_true", help="Run both desktop daemon and local API server")
+    parser.add_argument("--tray", action="store_true", help="Run silently in the Windows system tray (zero console window)")
     parser.add_argument("--test", type=str, help="Quick test formatting on a text string")
     parser.add_argument("--mode", type=str, default="auto", choices=["auto", "whatsapp", "markdown", "plain", "ai_prompt", "prompt"], help="Formatting mode for --test")
     parser.add_argument("--set-key", type=str, help="Quickly set and save your Gemini API key")
@@ -34,8 +35,29 @@ def main():
         return
 
     # If no arguments provided, default to --all
-    if not (args.desktop or args.server or args.all or args.test):
+    if not (args.desktop or args.server or args.all or args.tray or args.test):
         args.all = True
+
+    if args.tray:
+        # Start server in background daemon thread
+        server_thread = threading.Thread(
+            target=start_server,
+            kwargs={"host": config.get("server_host", "127.0.0.1"), "port": config.get("server_port", 8765)},
+            daemon=True
+        )
+        server_thread.start()
+
+        # Start desktop hook in background daemon thread
+        engine = PolisherEngine(config)
+        desktop_hook = DesktopHook(engine=engine)
+        hook_thread = threading.Thread(target=desktop_hook.start, daemon=True)
+        hook_thread.start()
+
+        # Run system tray app on main thread
+        from omnipolish.desktop.tray import SystemTrayApp
+        tray_app = SystemTrayApp(hook=desktop_hook, engine=engine)
+        tray_app.run()
+        return
 
     if args.test:
         engine = PolisherEngine()

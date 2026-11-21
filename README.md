@@ -37,31 +37,36 @@
 
 ---
 
-## ⚡ Quick Start (Windows)
+## ⚡ Launch Options (Windows)
 
-### 1. Launch OmniPolish
-Double-click **`run.bat`** or run:
-```powershell
-cd C:\Users\madha\Desktop\omnipolish
-.\.venv\Scripts\python.exe -m omnipolish.main --all
-```
+### Option A: Silent Background Mode (Zero Console Window - Recommended)
+Double-click **`start_tray.vbs`** (or **`start_tray.bat`**):
+* OmniPolish launches silently directly into your **Windows System Tray** (notification area next to the clock).
+* **Zero black command prompt window.**
+* Right-click the tray icon to switch formatting styles, toggle pause, open settings, or set it to **Run on Windows Startup**.
+* To stop OmniPolish anytime: right-click tray icon $\rightarrow$ **Exit**, or double-click **`stop.bat`**.
 
-### 2. Supported Hotkeys
-OmniPolish supports multiple conflict-free shortcuts out of the box:
-* **`F8`** *(Easiest: single key press!)*
-* **`Ctrl + Shift + R`** *(Standard)*
-* **`Ctrl + Shift + Space`**
-* **`Alt + Q`**
+### Option B: Terminal Mode (With Live Debug Logs)
+Double-click **`run.bat`**:
+* Displays live logs showing captured text, response times, and which SLM model handled each shortcut.
 
-> **Note on `Ctrl + Alt + R`:** On Windows international keyboards, `Ctrl + Alt` functions as `AltGr`, which types the trademark symbol `®`. OmniPolish uses **`F8`** and **`Ctrl + Shift + R`** to avoid this issue.
+---
 
-### 3. How to Use Anywhere
-1. Type a draft in **WhatsApp Desktop**, **Discord**, **Notepad**, or **any browser**:
-   > `hey bro teh meeting is tomorrow at 5pm plz dont be late we need to submit project`
-2. **Highlight the text** (drag mouse or press `Ctrl + A`).
-3. Press **`F8`** (or **`Ctrl + Shift + R`**).
-4. ✨ It immediately transforms into:
-   > `Hey bro, the *meeting* is tomorrow at *5:00 PM*. Please don't be late—we need to submit the *project*.`
+## ⌨️ Global Shortcuts (Conflict-Free)
+
+| Shortcut | Function | Typical Apps |
+| :--- | :--- | :--- |
+| **`Alt + Q`** *(or `F8`)* | **💬 Message Polisher & Highlighter** | WhatsApp, Slack, Teams, Gmail, Instagram DMs |
+| **`Alt + P`** *(or `Ctrl + Shift + P`)* | **🧠 AI Prompt Supercharger** | ChatGPT, Gemini, Claude, Developer Tools |
+
+> **Note on Laptops:** On laptops where function keys (`F1`-`F12`) control volume/brightness, use **`Alt + Q`** and **`Alt + P`**—they never require the `Fn` key and never conflict with hardware settings!
+
+---
+
+## 💡 How to Use
+1. Click inside any message or prompt box (or highlight specific text).
+2. Press **`Alt + Q`** to polish messages, or **`Alt + P`** to supercharge an AI prompt.
+3. OmniPolish wipes out the old draft and inserts the clean, formatted version in-place!
 
 ---
 

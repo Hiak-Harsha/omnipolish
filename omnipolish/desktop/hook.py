@@ -16,6 +16,7 @@ class DesktopHook:
         self.engine = engine or PolisherEngine(self.config)
         self.lock = threading.Lock()
         self.hotkey_listener: Optional[keyboard.GlobalHotKeys] = None
+        self.is_paused = False
 
     def play_sound(self, success: bool = True) -> None:
         if not self.config.get("sound_feedback", True):
@@ -30,6 +31,8 @@ class DesktopHook:
 
     def on_hotkey_triggered(self, mode: Optional[str] = None) -> None:
         """Triggered when a hotkey is pressed."""
+        if self.is_paused:
+            return
         if not self.lock.acquire(blocking=False):
             return
 
