@@ -1,0 +1,14 @@
+{
+  "provider": "gemini",
+  "api_key": "YOUR_GEMINI_API_KEY_HERE",
+  "model": "gemini-flash-lite-latest",
+  "ollama_url": "http://localhost:11434",
+  "ollama_model": "llama3.2",
+  "openai_api_base": "https://api.groq.com/openai/v1",
+  "openai_model": "llama-3.3-70b-versatile",
+  "hotkey": "<ctrl>+<shift>+r",
+  "default_mode": "auto",
+  "sound_feedback": true,
+  "server_host": "127.0.0.1",
+  "server_port": 8765
+}
