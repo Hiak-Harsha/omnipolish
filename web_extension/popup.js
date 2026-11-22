@@ -58,17 +58,20 @@ async function runTest(mode) {
   btn.disabled = true;
 
   try {
-    const res = await fetch(`${API_BASE}/api/format`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, mode: mode })
-    });
-    if (!res.ok) throw new Error("API returned error");
-    const data = await res.json();
-    testInput.value = data.formatted_text;
+    chrome.runtime.sendMessage(
+      { action: "format_text", text, mode },
+      (res) => {
+        if (res && res.success && res.data && res.data.formatted_text) {
+          testInput.value = res.data.formatted_text;
+        } else {
+          alert("Could not reach OmniPolish daemon.\nPlease ensure OmniPolish is running (start_tray.vbs)!");
+        }
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    );
   } catch (err) {
     alert("Could not reach OmniPolish daemon.\nPlease ensure OmniPolish is running (start_tray.vbs)!");
-  } finally {
     btn.textContent = originalText;
     btn.disabled = false;
   }

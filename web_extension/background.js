@@ -58,3 +58,26 @@ chrome.commands.onCommand.addListener((command, tab) => {
     chrome.tabs.sendMessage(tab.id, { action: "trigger_polish", mode: "auto" });
   }
 });
+
+// Route format requests through background service worker to guarantee 100% bypass of Webpage CSP & Mixed-Content blocks
+chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+  if (req.action === "format_text") {
+    fetch("http://127.0.0.1:8765/api/format", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: req.text, mode: req.mode || "auto" })
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("API status " + res.status);
+        return res.json();
+      })
+      .then((data) => {
+        sendResponse({ success: true, data: data });
+      })
+      .catch((err) => {
+        console.warn("[OmniPolish Background] Fetch error:", err);
+        sendResponse({ success: false, error: err.message });
+      });
+    return true; // Keep message channel open for async response
+  }
+});

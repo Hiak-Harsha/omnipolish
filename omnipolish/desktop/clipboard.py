@@ -26,7 +26,7 @@ def release_all_modifiers() -> None:
     for vk in [VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN]:
         user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
 
-def wait_for_modifiers_release(timeout: float = 0.4) -> None:
+def wait_for_modifiers_release(timeout: float = 0.8) -> None:
     """Waits for the user to lift physical modifier keys (Alt, Ctrl, Shift) before executing simulated keystrokes."""
     start = time.time()
     while time.time() - start < timeout:
@@ -35,8 +35,8 @@ def wait_for_modifiers_release(timeout: float = 0.4) -> None:
         shift_down = user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
         if not (alt_down or ctrl_down or shift_down):
             break
-        time.sleep(0.015)
-    time.sleep(0.02)
+        time.sleep(0.02)
+    time.sleep(0.03)
     release_all_modifiers()
 
 def simulate_ctrl_c() -> None:
@@ -81,7 +81,7 @@ def simulate_ctrl_v() -> None:
     user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
     time.sleep(0.04)
 
-def capture_text(timeout: float = 0.9) -> Tuple[str, str]:
+def capture_text(manual_timeout: float = 0.25, all_timeout: float = 0.45) -> Tuple[str, str]:
     """Captures text from active window.
     1. First checks if the user has manually highlighted text with mouse or keyboard.
     2. If not, automatically performs Ctrl+A to select the whole active input box.
@@ -93,36 +93,36 @@ def capture_text(timeout: float = 0.9) -> Tuple[str, str]:
     # Attempt 1: Check manual selection (user highlighted with mouse or Shift+arrows)
     simulate_ctrl_c()
     start = time.time()
-    while time.time() - start < timeout:
+    while time.time() - start < manual_timeout:
         seq_now = user32.GetClipboardSequenceNumber()
         if seq_now != seq_before:
-            time.sleep(0.03)
+            time.sleep(0.02)
             try:
                 text = pyperclip.paste()
                 if text and text.strip():
                     return text.strip(), "manual"
             except Exception:
                 pass
-        time.sleep(0.03)
+        time.sleep(0.02)
 
     # Attempt 2: Auto Select-All (User has cursor inside input box without dragging mouse)
     seq_before_all = user32.GetClipboardSequenceNumber()
     simulate_ctrl_a()
-    time.sleep(0.05)
+    time.sleep(0.03)
     simulate_ctrl_c()
 
     start = time.time()
-    while time.time() - start < timeout:
+    while time.time() - start < all_timeout:
         seq_now = user32.GetClipboardSequenceNumber()
         if seq_now != seq_before_all:
-            time.sleep(0.03)
+            time.sleep(0.02)
             try:
                 text = pyperclip.paste()
                 if text and text.strip():
                     return text.strip(), "all"
             except Exception:
                 pass
-        time.sleep(0.03)
+        time.sleep(0.02)
 
     return "", "none"
 

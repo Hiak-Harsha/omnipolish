@@ -15,10 +15,10 @@ class BaseProvider(ABC):
 
 class GeminiProvider(BaseProvider):
     """Google Gemini & Gemma Multi-SLM Provider with task-specialized routing."""
-    # Fast SLMs for everyday chat/messaging (<800ms)
-    FAST_SLMS = ["gemini-flash-lite-latest", "gemma-4-26b-a4b-it", "gemini-3.8-flash"]
+    # Fast SLMs for everyday chat/messaging (<1500ms) - tested and 100% active on user key
+    FAST_SLMS = ["gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
     # Deeper reasoning models for advanced AI prompt architecture
-    REASONING_SLMS = ["gemini-3.8-flash", "gemini-flash-lite-latest", "gemma-4-26b-a4b-it"]
+    REASONING_SLMS = ["gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
 
     def __init__(self, api_key: str, model: str = "gemini-flash-lite-latest"):
         self.api_key = api_key

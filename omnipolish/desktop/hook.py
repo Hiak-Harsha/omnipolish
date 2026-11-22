@@ -8,7 +8,7 @@ from pynput import keyboard
 
 from omnipolish.config import load_config
 from omnipolish.core.engine import PolisherEngine
-from omnipolish.desktop.clipboard import capture_text, replace_text, release_all_modifiers
+from omnipolish.desktop.clipboard import capture_text, replace_text, release_all_modifiers, wait_for_modifiers_release
 
 class DesktopHook:
     def __init__(self, engine: Optional[PolisherEngine] = None):
@@ -40,7 +40,9 @@ class DesktopHook:
 
         def worker():
             try:
-                time.sleep(0.12)
+                # Wait for user to release hotkey (e.g. Alt) so simulated Ctrl+C doesn't collide
+                wait_for_modifiers_release(timeout=0.6)
+                time.sleep(0.04)
                 release_all_modifiers()
 
                 selected_text, capture_mode = capture_text()

@@ -497,21 +497,27 @@
         }
       }
 
-      const res = await fetch(API_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: textToPolish, mode: effectiveMode })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.formatted_text) {
-          let output = data.formatted_text;
-          replaceElementText(activeElement, output, isPartial, effectiveMode);
+      // Route through extension background service worker to guarantee 100% bypass of Webpage CSP and Mixed Content
+      chrome.runtime.sendMessage(
+        { action: "format_text", text: textToPolish, mode: effectiveMode },
+        (res) => {
+          if (res && res.success && res.data && res.data.formatted_text) {
+            let output = res.data.formatted_text;
+            replaceElementText(activeElement, output, isPartial, effectiveMode);
+          } else {
+            console.warn("[OmniPolish] Format failed:", res?.error);
+          }
+          if (pillShadow) {
+            pillShadow.getElementById("wrapper")?.classList.remove("loading");
+          }
+          if (pillContainer) {
+            pillContainer.style.display = "none";
+          }
         }
-      }
+      );
+      return;
     } catch (err) {
-      console.warn("[OmniPolish] Could not connect to daemon on localhost:8765.");
+      console.warn("[OmniPolish] Could not send message to background worker.", err);
     } finally {
       if (pillShadow) {
         pillShadow.getElementById("wrapper")?.classList.remove("loading");
