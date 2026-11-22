@@ -1,16 +1,32 @@
 {
   "manifest_version": 3,
-  "name": "OmniPolish - AI Text Polisher",
-  "version": "1.0.0",
-  "description": "Autocorrects, structures, and highlights key points in any text field across WhatsApp Web, ChatGPT, Gmail, and more.",
-  "permissions": ["activeTab", "storage"],
+  "name": "OmniPolish - AI Text Polisher & Prompt Supercharger",
+  "version": "1.1.0",
+  "description": "Autocorrects, structures, and highlights key points in WhatsApp Web, ChatGPT, Gmail, Instagram, and any web input.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus"
+  ],
   "host_permissions": [
     "http://127.0.0.1:8765/*",
     "http://localhost:8765/*"
   ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "OmniPolish Settings"
+    "default_title": "OmniPolish Settings",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
