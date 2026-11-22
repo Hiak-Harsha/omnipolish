@@ -4,6 +4,7 @@ import time
 import re
 from typing import Any, Dict, Optional, Tuple
 from omnipolish.config import load_config
+from omnipolish.core.formatter import to_unicode_bold
 from omnipolish.core.providers import (
     BaseProvider,
     GeminiProvider,
@@ -46,13 +47,11 @@ class PolisherEngine:
         for p in preambles:
             output = re.sub(p, "", output, flags=re.IGNORECASE).strip()
 
-        # Enforce single asterisk bolding for WhatsApp and everyday chats so no extra asterisk is visible
-        if mode.lower() in ("whatsapp", "chat", "dm"):
-            output = re.sub(r"\*\*([^\*]+)\*\*", r"*\1*", output)
-        elif mode.lower() == "auto":
-            # For everyday messages, ensure single-asterisk bolding (*bold*) so WhatsApp/Slack render cleanly
-            if not ("```" in output or "Role & Objective" in output or "\n# " in output):
-                output = re.sub(r"\*\*([^\*]+)\*\*", r"*\1*", output)
+        # Convert bold markers to genuine Unicode Bold (e.g. 𝗺𝗲𝗲𝘁𝗶𝗻𝗴) so ZERO asterisks appear in sent messages!
+        # Markdown **bold** is preserved strictly when mode is explicitly 'markdown' or 'ai_prompt'
+        if mode.lower() in ("whatsapp", "chat", "dm", "plain", "auto"):
+            if not ("Role & Objective" in output or "```" in output):
+                output = to_unicode_bold(output)
 
         return output
 

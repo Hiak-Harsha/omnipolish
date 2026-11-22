@@ -26,16 +26,29 @@ def release_all_modifiers() -> None:
     for vk in [VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN]:
         user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
 
+def wait_for_modifiers_release(timeout: float = 0.4) -> None:
+    """Waits for the user to lift physical modifier keys (Alt, Ctrl, Shift) before executing simulated keystrokes."""
+    start = time.time()
+    while time.time() - start < timeout:
+        alt_down = user32.GetAsyncKeyState(VK_MENU) & 0x8000
+        ctrl_down = user32.GetAsyncKeyState(VK_CONTROL) & 0x8000
+        shift_down = user32.GetAsyncKeyState(VK_SHIFT) & 0x8000
+        if not (alt_down or ctrl_down or shift_down):
+            break
+        time.sleep(0.015)
+    time.sleep(0.02)
+    release_all_modifiers()
+
 def simulate_ctrl_c() -> None:
     """Sends a clean Ctrl+C key event sequence without modifier interference."""
-    release_all_modifiers()
-    time.sleep(0.05)
+    wait_for_modifiers_release()
+    time.sleep(0.03)
     user32.keybd_event(VK_CONTROL, 0, 0, 0)
     user32.keybd_event(VK_C, 0, 0, 0)
-    time.sleep(0.04)
+    time.sleep(0.03)
     user32.keybd_event(VK_C, 0, KEYEVENTF_KEYUP, 0)
     user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
-    time.sleep(0.05)
+    time.sleep(0.03)
 
 def simulate_ctrl_a() -> None:
     """Sends a clean Ctrl+A to select all text in the current input box."""
@@ -59,16 +72,16 @@ def simulate_backspace() -> None:
 
 def simulate_ctrl_v() -> None:
     """Sends a clean Ctrl+V key event sequence without modifier interference."""
-    release_all_modifiers()
-    time.sleep(0.05)
+    wait_for_modifiers_release()
+    time.sleep(0.04)
     user32.keybd_event(VK_CONTROL, 0, 0, 0)
     user32.keybd_event(VK_V, 0, 0, 0)
     time.sleep(0.04)
     user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
     user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
-    time.sleep(0.05)
+    time.sleep(0.04)
 
-def capture_text(timeout: float = 0.7) -> Tuple[str, str]:
+def capture_text(timeout: float = 0.9) -> Tuple[str, str]:
     """Captures text from active window.
     1. First checks if the user has manually highlighted text with mouse or keyboard.
     2. If not, automatically performs Ctrl+A to select the whole active input box.

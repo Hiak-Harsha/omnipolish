@@ -20,9 +20,9 @@ def main():
     parser.add_argument("--settings", action="store_true", help="Open visual settings window")
     
     args = parser.parse_args()
+    config = load_config()
 
     if args.set_key:
-        config = load_config()
         config["api_key"] = args.set_key.strip()
         config["provider"] = "gemini"
         save_config(config)
@@ -65,8 +65,6 @@ def main():
         formatted, latency, provider = engine.format_text(args.test, mode=args.mode)
         print(f"[Polished by {provider} in {latency:.1f}ms]:\n{formatted}\n")
         return
-
-    config = load_config()
 
     if args.all:
         # Start server in background thread, desktop hook in main thread

@@ -8,17 +8,17 @@ Your sole job is to rewrite the user's input text to be:
 
 RULES:
 - Tone Preservation: Preserve the author's intended tone (casual, professional, friendly, direct). Do NOT sound like a robotic customer service bot if the input is a casual chat.
-- Highlighting Syntax:
+- Highlighting & Clean Formatting Syntax:
 {highlighting_rules}
 - Restructuring: If the message contains multiple ideas or items, break them into bullet points or concise paragraphs.
 - Zero Filler: Output ONLY the polished message. Do NOT include greetings like "Here is your message:", "Sure:", quotes around the message, or any explanations.
 """
 
-WHATSAPP_RULES = """- Use WhatsApp styling:
-  * CRITICAL FOR WHATSAPP: Emphasize important terms with SINGLE asterisks only: *important key point*. NEVER use double asterisks ** as it leaves an ugly extra asterisk visible in WhatsApp!
+WHATSAPP_RULES = """- Use WhatsApp & Chat styling:
+  * ZERO-ASTERISK EMPHASIS: Emphasize key terms or important phrases using single asterisks: *important key point*. NEVER use double asterisks **.
+  * Bullet Points: For lists, use clean bullets like • or - (NEVER asterisk bullets).
   * Use single underscores for italics: _italic_
-  * Use clean line breaks and emojis where appropriate for natural readability.
-  * For lists, use clean bullets like • or -."""
+  * Use clean line breaks and emojis where appropriate for natural readability."""
 
 MARKDOWN_RULES = """- Use standard Markdown styling:
   * Emphasize important terms with double asterisks: **important key point**
@@ -27,10 +27,10 @@ MARKDOWN_RULES = """- Use standard Markdown styling:
 
 PLAIN_RULES = """- For plain-text platforms (Instagram DMs, SMS):
   * Use clean bullet points (•), arrows (👉), and clean spacing.
-  * Use UPPERCASE or brackets [KEY POINT] sparingly for emphasis if needed, avoiding raw code symbols."""
+  * Emphasize key points using *important point* or clean UPPERCASE sparingly, avoiding raw markdown symbols."""
 
 AUTO_RULES = """- Platform Auto-adaptive styling:
-  * If the message is a chat message (WhatsApp, DM, text): ALWAYS use single asterisks (*important point*). NEVER use double asterisks (**).
+  * If the message is a chat message (WhatsApp, DM, text, chat input): emphasize key points with single asterisks (*important point*), NEVER use double asterisks (**), and use clean bullets (•).
   * If the input is an email, documentation, or query for ChatGPT/Gemini: use standard Markdown (**important point**)."""
 
 AI_PROMPT_OPTIMIZER_PROMPT = """You are an elite Prompt Architect and Senior AI Engineer.

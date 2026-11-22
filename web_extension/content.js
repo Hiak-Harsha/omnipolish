@@ -1,7 +1,10 @@
 /**
  * OmniPolish Content Script
- * Injects Floating Action Pill, Handles In-Page Hotkeys (Alt+Q, Alt+P),
- * Supports Mouse Selection, and Replaces Text in WhatsApp Web, ChatGPT, Gmail, Instagram, etc.
+ * - Injects Floating Action Pill with Instant Dismiss ('✕') and Auto-show preferences
+ * - Handles 'Alt+Z' command to summon / dismiss the pill on demand
+ * - Handles In-Page Hotkeys (Alt+Q for Polish, Alt+P for Prompt, Esc for Dismiss)
+ * - Guarantees robust mouse pointer selection replacement in WhatsApp Web, ChatGPT, Gmail, etc.
+ * - Enforces Zero-Asterisk Unicode Bold formatting for chat messages
  */
 
 (function () {
@@ -12,12 +15,17 @@
   let pillContainer = null;
   let pillShadow = null;
   let hidePillTimeout = null;
+
+  // Settings & Dismissal State
   let showPillSetting = true;
+  let isDismissedForCurrentFocus = false;
 
   let savedRange = null;
   let savedSelectedText = "";
+  let selectionStartIdx = -1;
+  let selectionEndIdx = -1;
 
-  // Load user preference for floating pill
+  // 1. Load user preferences
   chrome.storage?.sync?.get(["omnipolish_show_pill"], (data) => {
     if (data?.omnipolish_show_pill !== undefined) {
       showPillSetting = data.omnipolish_show_pill;
@@ -33,8 +41,12 @@
     }
   });
 
-  // Track mouse text selection across the page
+  // 2. Track mouse text selection across the page
   document.addEventListener("selectionchange", () => {
+    // If user explicitly dismissed the pill for the current focus, do not auto-pop
+    if (isDismissedForCurrentFocus) return;
+
+    // First check standard window selection (contenteditable / text)
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && sel.toString().trim()) {
       savedSelectedText = sel.toString().trim();
@@ -43,25 +55,74 @@
       } catch (e) {
         savedRange = null;
       }
-      
+
       const container = sel.anchorNode?.nodeType === 1 ? sel.anchorNode : sel.anchorNode?.parentElement;
       const editable = container?.closest('textarea, input[type="text"], [contenteditable="true"]');
       if (editable) {
         activeElement = editable;
-        positionPillNearRange(savedRange);
+        if (showPillSetting) {
+          positionPillNearRange(savedRange);
+        }
       }
-    } else {
-      savedSelectedText = "";
+      return;
     }
+
+    // Check textarea or text input selection
+    const active = document.activeElement;
+    if (active && (active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text"))) {
+      const sStart = active.selectionStart;
+      const sEnd = active.selectionEnd;
+      if (typeof sStart === "number" && typeof sEnd === "number" && sStart !== sEnd) {
+        savedSelectedText = active.value.substring(sStart, sEnd).trim();
+        selectionStartIdx = sStart;
+        selectionEndIdx = sEnd;
+        activeElement = active;
+        if (showPillSetting) {
+          positionPillNearElement(active);
+        }
+        return;
+      }
+    }
+
+    savedSelectedText = "";
+    selectionStartIdx = -1;
+    selectionEndIdx = -1;
   });
 
-  // --- 1. SHADOW DOM FLOATING ACTION PILL ---
+  // Reset dismissal state when user moves to another field
+  document.addEventListener("focusin", (e) => {
+    isDismissedForCurrentFocus = false;
+    const target = e.target;
+    if (
+      target &&
+      (target.tagName === "TEXTAREA" ||
+       (target.tagName === "INPUT" && target.type === "text") ||
+       target.isContentEditable)
+    ) {
+      activeElement = target;
+      if (showPillSetting) {
+        showPillFor(target);
+      }
+    }
+  }, true);
+
+  document.addEventListener("focusout", (e) => {
+    hidePillWithDelay();
+  }, true);
+
+  // --- 3. SHADOW DOM FLOATING ACTION PILL ---
   function initFloatingPill() {
     if (pillContainer) return;
 
     pillContainer = document.createElement("div");
     pillContainer.id = "omnipolish-pill-root";
     pillContainer.style.cssText = "position: absolute; z-index: 2147483647; display: none; pointer-events: auto;";
+
+    // Crucial: prevent mousedown on pill from taking focus away from editable input
+    pillContainer.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+    });
+
     document.body.appendChild(pillContainer);
 
     pillShadow = pillContainer.attachShadow({ mode: "open" });
@@ -73,7 +134,7 @@
           background: #0f172a;
           border: 1px solid #38bdf8;
           border-radius: 20px;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 10px rgba(56, 189, 248, 0.2);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), 0 0 10px rgba(56, 189, 248, 0.25);
           padding: 3px 6px;
           gap: 4px;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -100,6 +161,31 @@
         }
         .pill-btn.prompt-btn:hover {
           color: #a855f7;
+        }
+        .close-btn {
+          background: transparent;
+          border: none;
+          color: #64748b;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          padding: 3px 6px;
+          border-radius: 10px;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: color 0.15s, background 0.15s;
+        }
+        .close-btn:hover {
+          color: #f87171;
+          background: #1e293b;
+        }
+        .divider {
+          width: 1px;
+          height: 14px;
+          background: #334155;
+          margin: 0 2px;
         }
         .sparkle-icon {
           font-size: 13px;
@@ -128,33 +214,74 @@
         <button class="pill-btn prompt-btn" id="promptBtn" title="Supercharge for ChatGPT/Gemini (Alt+P)">
           <span>🧠 Prompt</span>
         </button>
+        <div class="divider"></div>
+        <button class="close-btn" id="closeBtn" title="Dismiss for now (Esc) / Alt+Z to summon">✕</button>
       </div>
     `;
 
     const polishBtn = pillShadow.getElementById("polishBtn");
     const promptBtn = pillShadow.getElementById("promptBtn");
+    const closeBtn = pillShadow.getElementById("closeBtn");
 
-    // Handle both pointerdown and click
-    const handleAction = (mode, e) => {
+    // Close button: dismisses the pill immediately for this specific instant
+    closeBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      executePolish(mode);
-    };
+      dismissPill();
+    });
 
-    polishBtn.addEventListener("pointerdown", (e) => handleAction("auto", e));
-    polishBtn.addEventListener("click", (e) => handleAction("auto", e));
+    // Polish and Prompt button actions
+    polishBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      executePolish("auto");
+    });
 
-    promptBtn.addEventListener("pointerdown", (e) => handleAction("ai_prompt", e));
-    promptBtn.addEventListener("click", (e) => handleAction("ai_prompt", e));
+    promptBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      executePolish("ai_prompt");
+    });
+  }
+
+  function dismissPill() {
+    isDismissedForCurrentFocus = true;
+    if (pillContainer) {
+      pillContainer.style.display = "none";
+    }
+  }
+
+  function togglePillOnCommand() {
+    initFloatingPill();
+    if (pillContainer.style.display === "block") {
+      dismissPill();
+    } else {
+      isDismissedForCurrentFocus = false;
+      // Show at range or active element
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && sel.toString().trim()) {
+        try {
+          const r = sel.getRangeAt(0);
+          positionPillNearRange(r);
+          return;
+        } catch (e) {}
+      }
+
+      const active = document.activeElement;
+      if (active && (active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text") || active.isContentEditable)) {
+        activeElement = active;
+        positionPillNearElement(active);
+      }
+    }
   }
 
   function positionPillNearElement(el) {
-    if (!showPillSetting || !pillContainer) return;
+    if (!pillContainer) return;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
     const top = window.scrollY + rect.bottom - 36;
-    const left = window.scrollX + rect.right - 145;
+    const left = window.scrollX + rect.right - 165;
 
     pillContainer.style.top = `${Math.max(window.scrollY + 5, top)}px`;
     pillContainer.style.left = `${Math.max(window.scrollX + 5, left)}px`;
@@ -162,12 +289,11 @@
   }
 
   function positionPillNearRange(range) {
-    if (!showPillSetting || !pillContainer || !range) return;
+    if (!pillContainer || !range) return;
     initFloatingPill();
     const rect = range.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return;
 
-    // Position just above or below the highlighted mouse selection
     const top = window.scrollY + rect.bottom + 6;
     const left = window.scrollX + rect.left;
 
@@ -178,7 +304,7 @@
   }
 
   function showPillFor(el) {
-    if (!showPillSetting) return;
+    if (isDismissedForCurrentFocus) return;
     initFloatingPill();
     activeElement = el;
     clearTimeout(hidePillTimeout);
@@ -188,42 +314,108 @@
   function hidePillWithDelay() {
     clearTimeout(hidePillTimeout);
     hidePillTimeout = setTimeout(() => {
-      // Don't hide if user has active mouse selection
       if (!savedSelectedText && pillContainer) {
         pillContainer.style.display = "none";
       }
     }, 600);
   }
 
-  // --- 2. DEEP TEXT RETRIEVAL & INJECTION ---
+  // --- 4. UNICODE BOLD & TEXT INJECTION (ZERO ASTERISKS) ---
+  function toUnicodeBold(str) {
+    if (!str) return "";
+    // 1. Replace **bold** and *bold* with true Unicode Mathematical Bold
+    let res = str.replace(/\*{1,2}([^*\n]+?)\*{1,2}/g, (match, inner) => {
+      let b = "";
+      for (let i = 0; i < inner.length; i++) {
+        const code = inner.charCodeAt(i);
+        if (code >= 65 && code <= 90) {
+          b += String.fromCodePoint(code - 65 + 0x1D5D4);
+        } else if (code >= 97 && code <= 122) {
+          b += String.fromCodePoint(code - 97 + 0x1D5EE);
+        } else if (code >= 48 && code <= 57) {
+          b += String.fromCodePoint(code - 48 + 0x1D7EC);
+        } else {
+          b += inner[i];
+        }
+      }
+      return b;
+    });
+
+    // 2. Convert asterisk bullets to clean bullet characters
+    res = res.replace(/^\*\s+/gm, "• ");
+    res = res.replace(/\n\*\s+/g, "\n• ");
+
+    // 3. Purge any remaining stray asterisks
+    res = res.replace(/\*{1,2}/g, "");
+    return res;
+  }
+
   function getFullElementText(el) {
     if (!el) return "";
     if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type === "text")) {
-      return el.value;
+      return el.value || "";
     }
     if (el.isContentEditable) {
-      return el.innerText;
+      return el.innerText || el.textContent || "";
     }
     return "";
   }
 
-  function replaceElementText(el, newText, isPartialSelection = false) {
+  function replaceElementText(el, newText, isPartialSelection = false, mode = "auto") {
     if (!el && !isPartialSelection) return;
 
-    // WhatsApp-specific: always enforce single asterisks so no extra star is visible
-    if (isWhatsApp) {
-      newText = newText.replace(/\*\*([^*]+)\*\*/g, "*$1*");
+    // Convert asterisks to real Unicode Bold for chats and WhatsApp so NO asterisks exist!
+    if (mode !== "ai_prompt") {
+      newText = toUnicodeBold(newText);
     }
 
+    // A. Replace mouse-selected text in <textarea> or <input>
+    if (isPartialSelection && el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type === "text"))) {
+      el.focus();
+      const start = selectionStartIdx >= 0 ? selectionStartIdx : el.selectionStart;
+      const end = selectionEndIdx >= 0 ? selectionEndIdx : el.selectionEnd;
+      if (typeof start === "number" && typeof end === "number" && start !== end) {
+        el.setRangeText(newText, start, end, "end");
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        document.execCommand("insertText", false, newText);
+      }
+      savedSelectedText = "";
+      selectionStartIdx = -1;
+      selectionEndIdx = -1;
+      return;
+    }
+
+    // B. Replace mouse-selected text in ContentEditable (WhatsApp Web, ChatGPT, Claude, Gmail)
     if (isPartialSelection && savedRange) {
-      // Replace only the mouse-selected range
+      if (el) el.focus();
       try {
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(savedRange);
-        document.execCommand("insertText", false, newText);
+
+        const success = document.execCommand("insertText", false, newText);
+        if (!success) {
+          savedRange.deleteContents();
+          const node = document.createTextNode(newText);
+          savedRange.insertNode(node);
+          const newRange = document.createRange();
+          newRange.setStartAfter(node);
+          newRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+        }
+
+        if (el) {
+          el.dispatchEvent(new InputEvent("input", {
+            bubbles: true,
+            cancelable: true,
+            inputType: "insertText",
+            data: newText
+          }));
+        }
       } catch (e) {
-        // Fallback for partial replacement
         savedRange.deleteContents();
         savedRange.insertNode(document.createTextNode(newText));
       }
@@ -232,7 +424,7 @@
       return;
     }
 
-    // Replace the entire input field
+    // C. Replace the entire input field
     el.focus();
     if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type === "text")) {
       el.select();
@@ -243,17 +435,23 @@
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
     } else if (el.isContentEditable) {
-      // ContentEditable (WhatsApp Web, ChatGPT, Claude, Gmail)
       const range = document.createRange();
       range.selectNodeContents(el);
       const sel = window.getSelection();
       sel.removeAllRanges();
       sel.addRange(range);
-      
-      document.execCommand("delete", false, null);
-      document.execCommand("insertText", false, newText);
 
-      // WhatsApp Web specific synthetic event to activate the green Send button
+      const dt = new DataTransfer();
+      dt.setData("text/plain", newText);
+      const pasteEv = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+      const handled = !el.dispatchEvent(pasteEv);
+
+      if (!handled) {
+        document.execCommand("delete", false, null);
+        document.execCommand("insertText", false, newText);
+      }
+
+      // Dispatch synthetic InputEvent to light up WhatsApp's green Send button
       el.dispatchEvent(new InputEvent("input", {
         bubbles: true,
         cancelable: true,
@@ -263,9 +461,8 @@
     }
   }
 
-  // --- 3. POLISH EXECUTION ---
+  // --- 5. POLISH EXECUTION ---
   async function executePolish(mode = "auto") {
-    // 1. Determine if we are polishing mouse-selected text or the whole input box
     let textToPolish = "";
     let isPartial = false;
 
@@ -285,13 +482,11 @@
 
     if (!textToPolish) return;
 
-    // Show loading spinner
     if (pillShadow) {
       pillShadow.getElementById("wrapper")?.classList.add("loading");
     }
 
     try {
-      // Determine mode: WhatsApp Web automatically defaults to 'whatsapp' mode (single asterisk)
       let effectiveMode = mode;
       if (effectiveMode === "auto") {
         if (isWhatsApp) {
@@ -312,11 +507,7 @@
         const data = await res.json();
         if (data.formatted_text) {
           let output = data.formatted_text;
-          // Clean double asterisks if WhatsApp
-          if (isWhatsApp || effectiveMode === "whatsapp") {
-            output = output.replace(/\*\*([^*]+)\*\*/g, "*$1*");
-          }
-          replaceElementText(activeElement, output, isPartial);
+          replaceElementText(activeElement, output, isPartial, effectiveMode);
         }
       }
     } catch (err) {
@@ -331,38 +522,45 @@
     }
   }
 
-  // --- 4. EVENT LISTENERS ---
-  document.addEventListener("focusin", (e) => {
-    const target = e.target;
-    if (
-      target &&
-      (target.tagName === "TEXTAREA" ||
-       (target.tagName === "INPUT" && target.type === "text") ||
-       target.isContentEditable)
-    ) {
-      showPillFor(target);
-    }
-  }, true);
-
-  document.addEventListener("focusout", (e) => {
-    hidePillWithDelay();
-  }, true);
-
-  // Keyboard Shortcuts: Alt+Q (Polish) and Alt+P (Prompt)
+  // --- 6. KEYBOARD SHORTCUTS & COMMANDS ---
   window.addEventListener("keydown", (e) => {
+    // 1. Esc key: instantly dismisses the pill if it is popping out
+    if (e.key === "Escape") {
+      if (pillContainer && pillContainer.style.display === "block") {
+        e.preventDefault();
+        dismissPill();
+        return;
+      }
+    }
+
+    // 2. Alt + Z: Command to Show / Reappear or Dismiss on demand!
+    if (e.altKey && (e.key === "z" || e.key === "Z")) {
+      e.preventDefault();
+      togglePillOnCommand();
+      return;
+    }
+
+    // 3. Alt + Q: Polish Message directly
     if (e.altKey && (e.key === "q" || e.key === "Q")) {
       e.preventDefault();
       executePolish("auto");
-    } else if (e.altKey && (e.key === "p" || e.key === "P")) {
+      return;
+    }
+
+    // 4. Alt + P: Supercharge AI Prompt directly
+    if (e.altKey && (e.key === "p" || e.key === "P")) {
       e.preventDefault();
       executePolish("ai_prompt");
+      return;
     }
   }, true);
 
-  // Context Menu listener
+  // Background Messages listener (Context Menu, Chrome Commands)
   chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     if (req.action === "trigger_polish") {
       executePolish(req.mode || "auto");
+    } else if (req.action === "toggle_pill") {
+      togglePillOnCommand();
     }
   });
 })();

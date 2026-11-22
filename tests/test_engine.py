@@ -50,7 +50,9 @@ def test_engine_fallback_execution():
         "urgent reminder for project submission",
         mode="whatsapp"
     )
-    assert "*urgent*" in formatted.lower() or "*reminder*" in formatted.lower()
+    # Ensure zero asterisks remain and text is converted to genuine Unicode Bold
+    assert "*" not in formatted
+    assert "project submission" in formatted
     assert latency >= 0.0
     assert "RuleBasedFallbackProvider" in provider
 
@@ -70,3 +72,21 @@ def test_api_format_endpoint():
     assert len(res.formatted_text) > 0
     assert res.latency_ms >= 0.0
     assert res.provider is not None
+
+def test_unicode_bold_formatting():
+    from omnipolish.core.formatter import to_unicode_bold
+    
+    # Double asterisks
+    res1 = to_unicode_bold("Please attend the **Urgent Meeting** today")
+    assert "*" not in res1
+    assert "Urgent" not in res1  # It was converted to Unicode bold chars
+    
+    # Single asterisks
+    res2 = to_unicode_bold("The *deadline* is tomorrow")
+    assert "*" not in res2
+    
+    # Asterisk bullets converted to clean bullets
+    res3 = to_unicode_bold("* First item\n* Second item")
+    assert "*" not in res3
+    assert "• First item" in res3
+    assert "• Second item" in res3
