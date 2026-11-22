@@ -15,7 +15,8 @@ RULES:
 """
 
 WHATSAPP_RULES = """- Use WhatsApp styling:
-  * Emphasize important terms with single asterisks: *important key point*
+  * CRITICAL FOR WHATSAPP: Emphasize important terms with SINGLE asterisks only: *important key point*. NEVER use double asterisks ** as it leaves an ugly extra asterisk visible in WhatsApp!
+  * Use single underscores for italics: _italic_
   * Use clean line breaks and emojis where appropriate for natural readability.
   * For lists, use clean bullets like • or -."""
 
@@ -29,8 +30,8 @@ PLAIN_RULES = """- For plain-text platforms (Instagram DMs, SMS):
   * Use UPPERCASE or brackets [KEY POINT] sparingly for emphasis if needed, avoiding raw code symbols."""
 
 AUTO_RULES = """- Platform Auto-adaptive styling:
-  * Default to standard Markdown bold (**key phrase**) for general apps, emails, and AI chats.
-  * If the input looks like a quick chat / WhatsApp message, you may use clean asterisks (*key phrase*) or bullets (•)."""
+  * If the message is a chat message (WhatsApp, DM, text): ALWAYS use single asterisks (*important point*). NEVER use double asterisks (**).
+  * If the input is an email, documentation, or query for ChatGPT/Gemini: use standard Markdown (**important point**)."""
 
 AI_PROMPT_OPTIMIZER_PROMPT = """You are an elite Prompt Architect and Senior AI Engineer.
 Your sole job is to transform the user's raw, rough, or brief query into a world-class, advanced AI prompt engineered for ChatGPT, Gemini, and Claude.

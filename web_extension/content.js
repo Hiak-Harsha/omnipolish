@@ -1,16 +1,21 @@
 /**
  * OmniPolish Content Script
  * Injects Floating Action Pill, Handles In-Page Hotkeys (Alt+Q, Alt+P),
- * and Replaces Text in WhatsApp Web, ChatGPT, Gmail, Instagram, etc.
+ * Supports Mouse Selection, and Replaces Text in WhatsApp Web, ChatGPT, Gmail, Instagram, etc.
  */
 
 (function () {
   const API_ENDPOINT = "http://127.0.0.1:8765/api/format";
+  const isWhatsApp = window.location.hostname.includes("whatsapp.com");
+
   let activeElement = null;
   let pillContainer = null;
   let pillShadow = null;
   let hidePillTimeout = null;
   let showPillSetting = true;
+
+  let savedRange = null;
+  let savedSelectedText = "";
 
   // Load user preference for floating pill
   chrome.storage?.sync?.get(["omnipolish_show_pill"], (data) => {
@@ -25,6 +30,28 @@
       if (!showPillSetting && pillContainer) {
         pillContainer.style.display = "none";
       }
+    }
+  });
+
+  // Track mouse text selection across the page
+  document.addEventListener("selectionchange", () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && sel.toString().trim()) {
+      savedSelectedText = sel.toString().trim();
+      try {
+        savedRange = sel.getRangeAt(0).cloneRange();
+      } catch (e) {
+        savedRange = null;
+      }
+      
+      const container = sel.anchorNode?.nodeType === 1 ? sel.anchorNode : sel.anchorNode?.parentElement;
+      const editable = container?.closest('textarea, input[type="text"], [contenteditable="true"]');
+      if (editable) {
+        activeElement = editable;
+        positionPillNearRange(savedRange);
+      }
+    } else {
+      savedSelectedText = "";
     }
   });
 
@@ -93,7 +120,7 @@
         .loading .sparkle-icon { display: none; }
       </style>
       <div class="pill-wrapper" id="wrapper">
-        <button class="pill-btn" id="polishBtn" title="Polish & Highlight Message (Alt+Q)">
+        <button class="pill-btn" id="polishBtn" title="Polish & Highlight (Alt+Q)">
           <span class="sparkle-icon">✨</span>
           <span class="spinner"></span>
           <span>Polish</span>
@@ -107,23 +134,25 @@
     const polishBtn = pillShadow.getElementById("polishBtn");
     const promptBtn = pillShadow.getElementById("promptBtn");
 
-    polishBtn.addEventListener("mousedown", (e) => {
+    // Handle both pointerdown and click
+    const handleAction = (mode, e) => {
       e.preventDefault();
-      if (activeElement) executePolish(activeElement, "auto");
-    });
+      e.stopPropagation();
+      executePolish(mode);
+    };
 
-    promptBtn.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      if (activeElement) executePolish(activeElement, "ai_prompt");
-    });
+    polishBtn.addEventListener("pointerdown", (e) => handleAction("auto", e));
+    polishBtn.addEventListener("click", (e) => handleAction("auto", e));
+
+    promptBtn.addEventListener("pointerdown", (e) => handleAction("ai_prompt", e));
+    promptBtn.addEventListener("click", (e) => handleAction("ai_prompt", e));
   }
 
-  function positionPill(el) {
+  function positionPillNearElement(el) {
     if (!showPillSetting || !pillContainer) return;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
-    // Position at bottom-right inside or right below the input
     const top = window.scrollY + rect.bottom - 36;
     const left = window.scrollX + rect.right - 145;
 
@@ -132,23 +161,43 @@
     pillContainer.style.display = "block";
   }
 
+  function positionPillNearRange(range) {
+    if (!showPillSetting || !pillContainer || !range) return;
+    initFloatingPill();
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return;
+
+    // Position just above or below the highlighted mouse selection
+    const top = window.scrollY + rect.bottom + 6;
+    const left = window.scrollX + rect.left;
+
+    pillContainer.style.top = `${Math.max(window.scrollY + 5, top)}px`;
+    pillContainer.style.left = `${Math.max(window.scrollX + 5, left)}px`;
+    pillContainer.style.display = "block";
+    clearTimeout(hidePillTimeout);
+  }
+
   function showPillFor(el) {
     if (!showPillSetting) return;
     initFloatingPill();
     activeElement = el;
     clearTimeout(hidePillTimeout);
-    positionPill(el);
+    positionPillNearElement(el);
   }
 
   function hidePillWithDelay() {
     clearTimeout(hidePillTimeout);
     hidePillTimeout = setTimeout(() => {
-      if (pillContainer) pillContainer.style.display = "none";
-    }, 400);
+      // Don't hide if user has active mouse selection
+      if (!savedSelectedText && pillContainer) {
+        pillContainer.style.display = "none";
+      }
+    }, 600);
   }
 
-  // --- 2. DEEP TEXT RETRIEVAL & INJECTION (Works with React, Lexical, DraftJS, WhatsApp Web) ---
-  function getElementText(el) {
+  // --- 2. DEEP TEXT RETRIEVAL & INJECTION ---
+  function getFullElementText(el) {
+    if (!el) return "";
     if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type === "text")) {
       return el.value;
     }
@@ -158,17 +207,41 @@
     return "";
   }
 
-  function setElementText(el, newText) {
+  function replaceElementText(el, newText, isPartialSelection = false) {
+    if (!el && !isPartialSelection) return;
+
+    // WhatsApp-specific: always enforce single asterisks so no extra star is visible
+    if (isWhatsApp) {
+      newText = newText.replace(/\*\*([^*]+)\*\*/g, "*$1*");
+    }
+
+    if (isPartialSelection && savedRange) {
+      // Replace only the mouse-selected range
+      try {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+        document.execCommand("insertText", false, newText);
+      } catch (e) {
+        // Fallback for partial replacement
+        savedRange.deleteContents();
+        savedRange.insertNode(document.createTextNode(newText));
+      }
+      savedSelectedText = "";
+      savedRange = null;
+      return;
+    }
+
+    // Replace the entire input field
     el.focus();
     if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type === "text")) {
-      // Standard input/textarea
       el.select();
       document.execCommand("insertText", false, newText);
       if (el.value !== newText) {
         el.value = newText;
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-        el.dispatchEvent(new Event("change", { bubbles: true }));
       }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
     } else if (el.isContentEditable) {
       // ContentEditable (WhatsApp Web, ChatGPT, Claude, Gmail)
       const range = document.createRange();
@@ -180,57 +253,85 @@
       document.execCommand("delete", false, null);
       document.execCommand("insertText", false, newText);
 
-      // Fallback if execCommand was prevented
-      if (el.innerText.trim() !== newText.trim()) {
-        el.innerText = newText;
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-      }
+      // WhatsApp Web specific synthetic event to activate the green Send button
+      el.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "insertText",
+        data: newText
+      }));
     }
   }
 
   // --- 3. POLISH EXECUTION ---
-  async function executePolish(el, mode = "auto") {
-    const originalText = getElementText(el).trim();
-    if (!originalText) return;
+  async function executePolish(mode = "auto") {
+    // 1. Determine if we are polishing mouse-selected text or the whole input box
+    let textToPolish = "";
+    let isPartial = false;
 
-    // Show loading spinner on pill
+    if (savedSelectedText && savedSelectedText.length > 0) {
+      textToPolish = savedSelectedText;
+      isPartial = true;
+    } else if (activeElement) {
+      textToPolish = getFullElementText(activeElement).trim();
+      isPartial = false;
+    } else {
+      const active = document.activeElement;
+      if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT" || active.isContentEditable)) {
+        activeElement = active;
+        textToPolish = getFullElementText(active).trim();
+      }
+    }
+
+    if (!textToPolish) return;
+
+    // Show loading spinner
     if (pillShadow) {
       pillShadow.getElementById("wrapper")?.classList.add("loading");
     }
 
     try {
-      // Check stored custom mode if mode is 'auto'
+      // Determine mode: WhatsApp Web automatically defaults to 'whatsapp' mode (single asterisk)
       let effectiveMode = mode;
-      if (mode === "auto") {
-        const stored = await chrome.storage?.sync?.get(["omnipolish_mode"]);
-        effectiveMode = stored?.omnipolish_mode || "auto";
+      if (effectiveMode === "auto") {
+        if (isWhatsApp) {
+          effectiveMode = "whatsapp";
+        } else {
+          const stored = await chrome.storage?.sync?.get(["omnipolish_mode"]);
+          effectiveMode = stored?.omnipolish_mode || "auto";
+        }
       }
 
       const res = await fetch(API_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: originalText, mode: effectiveMode })
+        body: JSON.stringify({ text: textToPolish, mode: effectiveMode })
       });
 
       if (res.ok) {
         const data = await res.json();
         if (data.formatted_text) {
-          setElementText(el, data.formatted_text);
+          let output = data.formatted_text;
+          // Clean double asterisks if WhatsApp
+          if (isWhatsApp || effectiveMode === "whatsapp") {
+            output = output.replace(/\*\*([^*]+)\*\*/g, "*$1*");
+          }
+          replaceElementText(activeElement, output, isPartial);
         }
-      } else {
-        console.warn("[OmniPolish] Server returned status:", res.status);
       }
     } catch (err) {
-      console.warn("[OmniPolish] Could not connect to daemon on localhost:8765. Make sure start_tray.vbs is running.");
+      console.warn("[OmniPolish] Could not connect to daemon on localhost:8765.");
     } finally {
       if (pillShadow) {
         pillShadow.getElementById("wrapper")?.classList.remove("loading");
+      }
+      if (pillContainer) {
+        pillContainer.style.display = "none";
       }
     }
   }
 
   // --- 4. EVENT LISTENERS ---
-  // Input focus & blur
   document.addEventListener("focusin", (e) => {
     const target = e.target;
     if (
@@ -250,42 +351,18 @@
   // Keyboard Shortcuts: Alt+Q (Polish) and Alt+P (Prompt)
   window.addEventListener("keydown", (e) => {
     if (e.altKey && (e.key === "q" || e.key === "Q")) {
-      const el = document.activeElement;
-      if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable)) {
-        e.preventDefault();
-        executePolish(el, "auto");
-      }
+      e.preventDefault();
+      executePolish("auto");
     } else if (e.altKey && (e.key === "p" || e.key === "P")) {
-      const el = document.activeElement;
-      if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable)) {
-        e.preventDefault();
-        executePolish(el, "ai_prompt");
-      }
+      e.preventDefault();
+      executePolish("ai_prompt");
     }
   }, true);
 
-  // Listen for Context Menu messages from background.js
+  // Context Menu listener
   chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     if (req.action === "trigger_polish") {
-      const el = document.activeElement;
-      if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable)) {
-        executePolish(el, req.mode || "auto");
-      } else if (req.selectedText) {
-        // Read-only text selected: polish and copy to clipboard
-        fetch(API_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: req.selectedText, mode: req.mode || "auto" })
-        })
-        .then(r => r.json())
-        .then(d => {
-          if (d.formatted_text) {
-            navigator.clipboard.writeText(d.formatted_text);
-            alert("✨ Polished text copied to clipboard!");
-          }
-        })
-        .catch(() => alert("Could not reach OmniPolish daemon."));
-      }
+      executePolish(req.mode || "auto");
     }
   });
 })();

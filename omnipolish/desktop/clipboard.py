@@ -68,61 +68,61 @@ def simulate_ctrl_v() -> None:
     user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
     time.sleep(0.05)
 
-def capture_text(timeout: float = 0.5) -> Tuple[str, str]:
+def capture_text(timeout: float = 0.7) -> Tuple[str, str]:
     """Captures text from active window.
-    1. First checks if the user has manually highlighted text.
+    1. First checks if the user has manually highlighted text with mouse or keyboard.
     2. If not, automatically performs Ctrl+A to select the whole active input box.
     Returns:
         Tuple of (captured_text, mode) where mode is 'manual' or 'all'.
     """
     seq_before = user32.GetClipboardSequenceNumber()
     
-    # Attempt 1: Check manual selection
+    # Attempt 1: Check manual selection (user highlighted with mouse or Shift+arrows)
     simulate_ctrl_c()
     start = time.time()
     while time.time() - start < timeout:
         seq_now = user32.GetClipboardSequenceNumber()
         if seq_now != seq_before:
-            time.sleep(0.02)
+            time.sleep(0.03)
             try:
                 text = pyperclip.paste()
                 if text and text.strip():
                     return text.strip(), "manual"
             except Exception:
                 pass
-        time.sleep(0.02)
+        time.sleep(0.03)
 
     # Attempt 2: Auto Select-All (User has cursor inside input box without dragging mouse)
     seq_before_all = user32.GetClipboardSequenceNumber()
     simulate_ctrl_a()
-    time.sleep(0.04)
+    time.sleep(0.05)
     simulate_ctrl_c()
 
     start = time.time()
     while time.time() - start < timeout:
         seq_now = user32.GetClipboardSequenceNumber()
         if seq_now != seq_before_all:
-            time.sleep(0.02)
+            time.sleep(0.03)
             try:
                 text = pyperclip.paste()
                 if text and text.strip():
                     return text.strip(), "all"
             except Exception:
                 pass
-        time.sleep(0.02)
+        time.sleep(0.03)
 
     return "", "none"
 
 def replace_text(new_text: str, capture_mode: str = "manual") -> None:
     """Replaces the old text with the new formatted message, ensuring the old message is 100% deleted.
     - If capture_mode == 'all': Selects all text again, deletes it with Backspace, then pastes.
-    - If capture_mode == 'manual': Deletes the highlighted selection with Backspace, then pastes.
+    - If capture_mode == 'manual': Directly pastes over the highlighted selection.
     """
     if not new_text:
         return
 
     pyperclip.copy(new_text)
-    time.sleep(0.04)
+    time.sleep(0.05)
 
     if capture_mode == "all":
         # Ensure everything in the active box is selected and wiped clean
@@ -130,10 +130,6 @@ def replace_text(new_text: str, capture_mode: str = "manual") -> None:
         time.sleep(0.04)
         simulate_backspace()
         time.sleep(0.04)
-    elif capture_mode == "manual":
-        # Wipe the highlighted selection
-        simulate_backspace()
-        time.sleep(0.04)
 
-    # Paste the new polished text
+    # Paste the new polished text (Ctrl+V naturally overwrites selected text)
     simulate_ctrl_v()

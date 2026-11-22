@@ -25,8 +25,8 @@ class PolisherEngine:
     def set_provider(self, provider: BaseProvider) -> None:
         self.provider = provider
 
-    def clean_output(self, raw_output: str) -> str:
-        """Sanitizes LLM output to remove accidental code block fences or prefixes."""
+    def clean_output(self, raw_output: str, mode: str = "auto") -> str:
+        """Sanitizes LLM output to remove accidental code block fences, preambles, and enforces correct bold syntax."""
         output = raw_output.strip()
         # Remove surrounding markdown code fences if model mistakenly wrapped response
         if output.startswith("```") and output.endswith("```"):
@@ -46,6 +46,14 @@ class PolisherEngine:
         for p in preambles:
             output = re.sub(p, "", output, flags=re.IGNORECASE).strip()
 
+        # Enforce single asterisk bolding for WhatsApp and everyday chats so no extra asterisk is visible
+        if mode.lower() in ("whatsapp", "chat", "dm"):
+            output = re.sub(r"\*\*([^\*]+)\*\*", r"*\1*", output)
+        elif mode.lower() == "auto":
+            # For everyday messages, ensure single-asterisk bolding (*bold*) so WhatsApp/Slack render cleanly
+            if not ("```" in output or "Role & Objective" in output or "\n# " in output):
+                output = re.sub(r"\*\*([^\*]+)\*\*", r"*\1*", output)
+
         return output
 
     def format_text(self, text: str, mode: Optional[str] = None) -> Tuple[str, float, str]:
@@ -61,7 +69,7 @@ class PolisherEngine:
         
         try:
             raw_result = self.provider.polish(text, mode=effective_mode)
-            formatted = self.clean_output(raw_result)
+            formatted = self.clean_output(raw_result, mode=effective_mode)
             if hasattr(self.provider, "last_used_model"):
                 provider_name = getattr(self.provider, "last_used_model")
             else:
@@ -70,7 +78,7 @@ class PolisherEngine:
             # Automatic fallback to rule-based engine on network or auth failure
             fallback = RuleBasedFallbackProvider()
             raw_result = fallback.polish(text, mode=effective_mode)
-            formatted = self.clean_output(raw_result)
+            formatted = self.clean_output(raw_result, mode=effective_mode)
             provider_name = f"RuleBasedFallback (after {e})"
 
         latency_ms = (time.perf_counter() - start_time) * 1000.0
