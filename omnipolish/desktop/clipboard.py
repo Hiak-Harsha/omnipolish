@@ -90,43 +90,46 @@ def capture_text() -> Tuple[str, str]:
     except Exception:
         pass
 
-    # Empty clipboard temporarily so we can reliably detect newly copied text
+    sentinel = "__OMNIPOLISH_COPY_SENTINEL__"
     try:
-        user32.OpenClipboard(0)
-        user32.EmptyClipboard()
-        user32.CloseClipboard()
+        pyperclip.copy(sentinel)
     except Exception:
         pass
 
+    time.sleep(0.04)
+
     # Attempt 1: Check manual selection (user highlighted with mouse or Shift+arrows)
     simulate_ctrl_c()
+    time.sleep(0.08)
+
     start = time.time()
     while time.time() - start < 0.35:
-        time.sleep(0.02)
+        time.sleep(0.03)
         try:
-            text = pyperclip.paste()
-            if text and text.strip():
-                return text.strip(), "manual"
+            curr = pyperclip.paste()
+            if curr != sentinel and curr.strip():
+                return curr.strip(), "manual"
         except Exception:
             pass
 
     # Attempt 2: Auto Select-All (User has cursor inside input box without dragging mouse)
     simulate_ctrl_a()
-    time.sleep(0.03)
+    time.sleep(0.04)
     simulate_ctrl_c()
+    time.sleep(0.08)
 
     start = time.time()
-    while time.time() - start < 0.45:
-        time.sleep(0.02)
+    while time.time() - start < 0.4:
+        time.sleep(0.03)
         try:
-            text = pyperclip.paste()
-            if text and text.strip():
-                return text.strip(), "all"
+            curr = pyperclip.paste()
+            if curr != sentinel and curr.strip():
+                return curr.strip(), "all"
         except Exception:
             pass
 
     # Attempt 3: Nothing was captured in active window. Restore previous clipboard.
-    if old_clipboard:
+    if old_clipboard and old_clipboard != sentinel:
         try:
             pyperclip.copy(old_clipboard)
         except Exception:

@@ -1,36 +1,45 @@
 /**
  * OmniPolish Background Service Worker
- * Handles Right-Click Context Menus and Extension Commands (Alt+Z, Alt+Q)
+ * Handles Right-Click Context Menus, Keyboard Shortcuts, and API Routing
  */
 
+function setupContextMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: "omnipolish_root",
+      title: "✨ OmniPolish",
+      contexts: ["selection", "editable", "page"]
+    });
+
+    chrome.contextMenus.create({
+      parentId: "omnipolish_root",
+      id: "omnipolish_polish",
+      title: "💬 Polish & Highlight Message (Alt+Q)",
+      contexts: ["selection", "editable"]
+    });
+
+    chrome.contextMenus.create({
+      parentId: "omnipolish_root",
+      id: "omnipolish_prompt",
+      title: "🧠 Supercharge AI Prompt (Alt+P)",
+      contexts: ["selection", "editable"]
+    });
+
+    chrome.contextMenus.create({
+      parentId: "omnipolish_root",
+      id: "omnipolish_toggle_pill",
+      title: "⚡ Show / Hide Action Pill (Alt+Z)",
+      contexts: ["selection", "editable", "page"]
+    });
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  // Create Context Menu items
-  chrome.contextMenus.create({
-    id: "omnipolish_root",
-    title: "✨ OmniPolish",
-    contexts: ["selection", "editable", "page"]
-  });
+  setupContextMenus();
+});
 
-  chrome.contextMenus.create({
-    parentId: "omnipolish_root",
-    id: "omnipolish_polish",
-    title: "💬 Polish & Highlight Message (Alt+Q)",
-    contexts: ["selection", "editable"]
-  });
-
-  chrome.contextMenus.create({
-    parentId: "omnipolish_root",
-    id: "omnipolish_prompt",
-    title: "🧠 Supercharge AI Prompt (Alt+P)",
-    contexts: ["selection", "editable"]
-  });
-
-  chrome.contextMenus.create({
-    parentId: "omnipolish_root",
-    id: "omnipolish_toggle_pill",
-    title: "⚡ Show / Hide Action Pill (Alt+Z)",
-    contexts: ["selection", "editable", "page"]
-  });
+chrome.runtime.onStartup.addListener(() => {
+  setupContextMenus();
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -49,7 +58,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 
-// Handle browser keyboard commands (e.g. Alt+Z)
+// Handle browser keyboard commands (Alt+Z, Alt+Q)
 chrome.commands.onCommand.addListener((command, tab) => {
   if (!tab || !tab.id) return;
   if (command === "toggle_pill") {

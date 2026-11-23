@@ -3,7 +3,7 @@
  * - Injects Floating Action Pill with Instant Dismiss ('✕') and Auto-show preferences
  * - Handles 'Alt+Z' command to summon / dismiss the pill on demand
  * - Handles In-Page Hotkeys (Alt+Q for Polish, Alt+P for Prompt, Esc for Dismiss)
- * - Guarantees robust mouse pointer selection replacement in WhatsApp Web, ChatGPT, Gmail, etc.
+ * - Safe, non-destructive text replacement for WhatsApp Web (Lexical), ChatGPT (ProseMirror), Gmail, etc.
  * - Enforces Zero-Asterisk Unicode Bold formatting for chat messages
  */
 
@@ -43,10 +43,9 @@
 
   // 2. Track mouse text selection across the page
   document.addEventListener("selectionchange", () => {
-    // If user explicitly dismissed the pill for the current focus, do not auto-pop
     if (isDismissedForCurrentFocus) return;
 
-    // First check standard window selection (contenteditable / text)
+    // Check standard window selection (contenteditable / text)
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && sel.toString().trim()) {
       savedSelectedText = sel.toString().trim();
@@ -60,9 +59,9 @@
       const editable = container?.closest('textarea, input[type="text"], [contenteditable="true"]');
       if (editable) {
         activeElement = editable;
-        if (showPillSetting) {
-          positionPillNearRange(savedRange);
-        }
+      }
+      if (showPillSetting && savedRange) {
+        positionPillNearRange(savedRange);
       }
       return;
     }
@@ -118,7 +117,7 @@
     pillContainer.id = "omnipolish-pill-root";
     pillContainer.style.cssText = "position: absolute; z-index: 2147483647; display: none; pointer-events: auto;";
 
-    // Crucial: prevent mousedown on pill from taking focus away from editable input
+    // Prevent mousedown on pill from taking focus away from editable input
     pillContainer.addEventListener("mousedown", (e) => {
       e.preventDefault();
     });
@@ -223,14 +222,12 @@
     const promptBtn = pillShadow.getElementById("promptBtn");
     const closeBtn = pillShadow.getElementById("closeBtn");
 
-    // Close button: dismisses the pill immediately for this specific instant
     closeBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       dismissPill();
     });
 
-    // Polish and Prompt button actions
     polishBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -253,11 +250,10 @@
 
   function togglePillOnCommand() {
     initFloatingPill();
-    if (pillContainer.style.display === "block") {
+    if (pillContainer && pillContainer.style.display === "block") {
       dismissPill();
     } else {
       isDismissedForCurrentFocus = false;
-      // Show at range or active element
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0 && sel.toString().trim()) {
         try {
@@ -276,7 +272,10 @@
   }
 
   function positionPillNearElement(el) {
+    if (!el) return;
+    initFloatingPill();
     if (!pillContainer) return;
+
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
@@ -289,8 +288,10 @@
   }
 
   function positionPillNearRange(range) {
-    if (!pillContainer || !range) return;
+    if (!range) return;
     initFloatingPill();
+    if (!pillContainer) return;
+
     const rect = range.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return;
 
@@ -305,7 +306,6 @@
 
   function showPillFor(el) {
     if (isDismissedForCurrentFocus) return;
-    initFloatingPill();
     activeElement = el;
     clearTimeout(hidePillTimeout);
     positionPillNearElement(el);
@@ -323,7 +323,6 @@
   // --- 4. UNICODE BOLD & TEXT INJECTION (ZERO ASTERISKS) ---
   function toUnicodeBold(str) {
     if (!str) return "";
-    // 1. Replace **bold** and *bold* with true Unicode Mathematical Bold
     let res = str.replace(/\*{1,2}([^*\n]+?)\*{1,2}/g, (match, inner) => {
       let b = "";
       for (let i = 0; i < inner.length; i++) {
@@ -341,11 +340,8 @@
       return b;
     });
 
-    // 2. Convert asterisk bullets to clean bullet characters
     res = res.replace(/^\*\s+/gm, "• ");
     res = res.replace(/\n\*\s+/g, "\n• ");
-
-    // 3. Purge any remaining stray asterisks
     res = res.replace(/\*{1,2}/g, "");
     return res;
   }
@@ -364,7 +360,6 @@
   function replaceElementText(el, newText, isPartialSelection = false, mode = "auto") {
     if (!el && !isPartialSelection) return;
 
-    // Convert asterisks to real Unicode Bold for chats and WhatsApp so NO asterisks exist!
     if (mode !== "ai_prompt") {
       newText = toUnicodeBold(newText);
     }
@@ -400,11 +395,6 @@
           savedRange.deleteContents();
           const node = document.createTextNode(newText);
           savedRange.insertNode(node);
-          const newRange = document.createRange();
-          newRange.setStartAfter(node);
-          newRange.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(newRange);
         }
 
         if (el) {
@@ -425,33 +415,21 @@
     }
 
     // C. Replace the entire input field
-    el.focus();
-    if (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type === "text")) {
+    if (el) el.focus();
+    if (el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type === "text"))) {
       el.select();
-      document.execCommand("insertText", false, newText);
-      if (el.value !== newText) {
+      const success = document.execCommand("insertText", false, newText);
+      if (!success || el.value !== newText) {
         el.value = newText;
       }
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
-    } else if (el.isContentEditable) {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
+    } else if (el && el.isContentEditable) {
+      // For WhatsApp Web (Lexical) and ChatGPT (ProseMirror): select all content and insertText seamlessly
+      document.execCommand("selectAll", false, null);
+      document.execCommand("insertText", false, newText);
 
-      const dt = new DataTransfer();
-      dt.setData("text/plain", newText);
-      const pasteEv = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
-      const handled = !el.dispatchEvent(pasteEv);
-
-      if (!handled) {
-        document.execCommand("delete", false, null);
-        document.execCommand("insertText", false, newText);
-      }
-
-      // Dispatch synthetic InputEvent to light up WhatsApp's green Send button
+      // Synthetic InputEvent ensures WhatsApp Web Send button is fully enabled
       el.dispatchEvent(new InputEvent("input", {
         bubbles: true,
         cancelable: true,
@@ -486,51 +464,63 @@
       pillShadow.getElementById("wrapper")?.classList.add("loading");
     }
 
-    try {
-      let effectiveMode = mode;
-      if (effectiveMode === "auto") {
-        if (isWhatsApp) {
-          effectiveMode = "whatsapp";
-        } else {
-          const stored = await chrome.storage?.sync?.get(["omnipolish_mode"]);
-          effectiveMode = stored?.omnipolish_mode || "auto";
-        }
+    let effectiveMode = mode;
+    if (effectiveMode === "auto") {
+      if (isWhatsApp) {
+        effectiveMode = "whatsapp";
+      } else {
+        const stored = await chrome.storage?.sync?.get(["omnipolish_mode"]);
+        effectiveMode = stored?.omnipolish_mode || "auto";
       }
+    }
 
-      // Route through extension background service worker to guarantee 100% bypass of Webpage CSP and Mixed Content
-      chrome.runtime.sendMessage(
-        { action: "format_text", text: textToPolish, mode: effectiveMode },
-        (res) => {
-          if (res && res.success && res.data && res.data.formatted_text) {
-            let output = res.data.formatted_text;
-            replaceElementText(activeElement, output, isPartial, effectiveMode);
-          } else {
-            console.warn("[OmniPolish] Format failed:", res?.error);
-          }
-          if (pillShadow) {
-            pillShadow.getElementById("wrapper")?.classList.remove("loading");
-          }
-          if (pillContainer) {
-            pillContainer.style.display = "none";
-          }
-        }
-      );
-      return;
-    } catch (err) {
-      console.warn("[OmniPolish] Could not send message to background worker.", err);
-    } finally {
+    const onComplete = (output) => {
+      if (output) {
+        replaceElementText(activeElement, output, isPartial, effectiveMode);
+      }
       if (pillShadow) {
         pillShadow.getElementById("wrapper")?.classList.remove("loading");
       }
       if (pillContainer) {
         pillContainer.style.display = "none";
       }
+    };
+
+    // Primary: Route through background service worker
+    try {
+      chrome.runtime.sendMessage(
+        { action: "format_text", text: textToPolish, mode: effectiveMode },
+        (res) => {
+          if (chrome.runtime.lastError || !res || !res.success) {
+            console.warn("[OmniPolish] Background failed, trying direct localhost fallback...");
+            fallbackDirectFetch(textToPolish, effectiveMode, onComplete);
+            return;
+          }
+          onComplete(res.data?.formatted_text);
+        }
+      );
+    } catch (e) {
+      fallbackDirectFetch(textToPolish, effectiveMode, onComplete);
     }
+  }
+
+  function fallbackDirectFetch(text, mode, callback) {
+    fetch(API_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, mode })
+    })
+      .then((r) => r.json())
+      .then((data) => callback(data.formatted_text))
+      .catch((err) => {
+        console.error("[OmniPolish] Both background and direct fetch failed. Is daemon running?", err);
+        callback(null);
+      });
   }
 
   // --- 6. KEYBOARD SHORTCUTS & COMMANDS ---
   window.addEventListener("keydown", (e) => {
-    // 1. Esc key: instantly dismisses the pill if it is popping out
+    // 1. Esc key: dismisses pill
     if (e.key === "Escape") {
       if (pillContainer && pillContainer.style.display === "block") {
         e.preventDefault();
@@ -539,7 +529,7 @@
       }
     }
 
-    // 2. Alt + Z: Command to Show / Reappear or Dismiss on demand!
+    // 2. Alt + Z: Summon / Dismiss pill on demand
     if (e.altKey && (e.key === "z" || e.key === "Z")) {
       e.preventDefault();
       togglePillOnCommand();
