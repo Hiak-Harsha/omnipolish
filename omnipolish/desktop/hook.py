@@ -40,14 +40,13 @@ class DesktopHook:
 
         def worker():
             try:
-                # Wait for user to release hotkey (e.g. Alt) so simulated Ctrl+C doesn't collide
-                wait_for_modifiers_release(timeout=0.6)
-                time.sleep(0.04)
-                release_all_modifiers()
+                # Wait for user to lift physical modifier keys (Alt, Ctrl, Shift)
+                wait_for_modifiers_release(timeout=0.5)
+                time.sleep(0.03)
 
                 selected_text, capture_mode = capture_text()
                 if not selected_text or not selected_text.strip():
-                    print("[OmniPolish] No text detected. Click inside a message box or highlight text first.")
+                    print("[OmniPolish] No text detected in active window.")
                     self.play_sound(success=False)
                     return
 
@@ -113,16 +112,21 @@ class DesktopHook:
             primary_hotkey: self.on_message_polish,
             "<ctrl>+<shift>+<space>": self.on_message_polish,
             "<alt>+q": self.on_message_polish,
+            "<ctrl>+<alt>+q": self.on_message_polish,
             "<f8>": self.on_message_polish,
             # AI Prompt Supercharger hotkeys
             "<alt>+p": self.on_prompt_supercharge,
             "<ctrl>+<shift>+p": self.on_prompt_supercharge,
+            "<ctrl>+<alt>+p": self.on_prompt_supercharge,
             "<f9>": self.on_prompt_supercharge
         }
 
-        with keyboard.GlobalHotKeys(hotkey_map) as listener:
-            self.hotkey_listener = listener
-            listener.join()
+        try:
+            self.hotkey_listener = keyboard.GlobalHotKeys(hotkey_map)
+            self.hotkey_listener.start()
+            self.hotkey_listener.join()
+        except Exception as e:
+            print(f"[OmniPolish] Desktop hotkey listener error: {e}")
 
     def stop(self) -> None:
         if self.hotkey_listener:
